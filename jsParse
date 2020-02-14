@@ -1,0 +1,12 @@
+#!/usr/bin/perl
+
+$file = shift(@ARGV);
+
+open (HANDLE, $file);
+
+while (my $line = <HANDLE>) {
+  if ($line =~ /[\S\/]+\/(\S*\.java)-(\d+)-\s+public (.+\))/) {
+    print "$1\t$2\t$3\n";
+  }
+
+}

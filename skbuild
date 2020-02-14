@@ -1,0 +1,483 @@
+#!/usr/bin/perl
+
+# Show which tool is being used
+print "SK Build v1.1 - Feb. 2020\n\n";
+
+# setup variables
+$TRUE          = 1;
+$FALSE         = 0;
+$VZW           = "VZW";
+$SPT           = "SPT";
+
+$debug         = $FLASE;
+$buildEngine   = "gradle";
+$buildEnv      = "";
+$itemIdTxt     = "";
+@other         = ();
+@assemble      = ();
+$buildString   = "";
+$svnRev        = "";
+$onDevice      = $FALSE;
+$qaEnv         = $FALSE;
+$qaModule      = $FALSE;
+$txtMarket     = $FALSE;
+$roboMarket    = $FALSE;
+$toString      = $FALSE;
+$itemIdFlag    = $FALSE;
+$allowHttp     = $FALSE;
+$allowRemote   = $FALSE;
+$isCallFilter  = $TRUE;
+$isPlayStored  = $FALSE;
+$isRcs         = $FALSE;
+$isLlTest      = $TRUE;
+$isProfile     = $FALSE;
+$doClean       = $TRUE;
+
+# quick shortcut for building Mobile Installer
+$sptMblInstl = $FALSE;
+
+# Set configuration strings
+###########################
+# Carrier and Environment
+$cfgSpt      = "configurations/spt-sprint-generic.xml";
+$cfgQa05     = "configurations/env-qa05.xml";
+$cfgDynItem  = "configurations/dynamic-spt-itemid.xml";
+
+# Build Options
+$cfgFstBld   = "configurations/proguard-shortcut-option.xml";
+$cfgTxtId    = "configurations/allow-textid-marketing.xml";
+$cfgSdCard   = "configurations/sdcard.xml";
+$cfgFrcCp    = "configurations/force-cp-option.xml";
+$cfgHttp     = "configurations/allow-http.xml";
+$cfgBuffer   = "configurations/buffer-time-no-met.xml";
+$cfgOnDev    = "configurations/ondevice.xml";
+$cfgRemote   = "configurations/remote-debug.xml";
+
+
+# Todo: find a way to determine the age of the current Git Check-in
+#       Use the date to determine the right build command to use
+
+
+# check that there are any command line arguments
+if (@ARGV < 1) {
+  UsageInstructions("You MUST specify at least the build target environment...");
+}
+
+# cycle through command line arguements
+while (@ARGV) {
+   $arg = shift(@ARGV);
+   print "Argument is: $arg\t" if ($debug);
+
+   #look for known arguments
+   if ($arg =~/-vzw/i) {
+      print "is Vzw\n" if ($debug);
+      if ($buildEnv eq "") {
+         $buildEnv = $VZW;
+      } else {
+         UsageInstructions("You cannot specify more than one build environment...");
+      }
+
+   }elsif ( $arg =~ /-sptMi/i ) {
+      print "is Spt MI\n" if ($debug);
+      $sptMblInstl = $TRUE;
+      $buildEnv = $SPT;
+
+   }elsif ($arg =~/-spt/i) {
+      print "is Spt\n" if ($debug);
+      if ($buildEnv eq "") {
+         $buildEnv = $SPT;
+      } else {
+         UsageInstructions("You cannot specify more than one build environment...");
+      }
+
+   }elsif ($arg =~/-on/i) {
+      print "is On Device\n" if ($debug);
+      $onDevice  = $TRUE;
+      $allowHttp = $TRUE;
+
+   }elsif ( ($arg =~/-qa\d\d/i) || ( $arg eq "-qa" ) ) {
+      print "is QA\n" if ($debug);
+      $qaEnv = $TRUE;
+
+   }elsif ($arg =~/-qamod/i) {
+      print "is Vzw\n" if ($debug);
+      $qaModule = $TRUE;
+
+   }elsif ($arg =~/-txt/i) {
+      print "is Txt\n" if ($debug);
+      $txtMarket = $TRUE;
+
+   }elsif ($arg =~/-robo/i) {
+      print "is Robo\n" if ($debug);
+      $roboMarket = $TRUE;
+
+   }elsif ($arg =~/-toString/i) {
+      print "is To String\n" if ($debug);
+      $toString = $TRUE;
+
+   }elsif ($arg =~/-debug/i) {
+      $debug = $TRUE;
+      print "is Debug\n" if ($debug);
+
+   }elsif ($arg =~ /-remote/i) {
+      print "is Remote\n" if ($debug);
+      $allowRemote = $TRUE;
+
+   }elsif ($arg =~ /-http/i) {
+      print "is HTTP\n" if ($debug);
+      $allowHttp = $TRUE;
+
+   }elsif ($arg =~ /-rcs/i) {
+      print "is RCS\n" if ($debug);
+      $isRcs = $TRUE;
+
+   }elsif ($arg =~ /-name/i) {
+      print "is Caller Name\n" if ($debug);
+      $isCallFilter = $FALSE;
+
+   }elsif ($arg =~ /-llprod/i) {
+      print "is Localytics\n" if ($debug);
+      $isLlTest = $FALSE;
+
+   }elsif ($arg =~ /-profile/i) {
+      print "is Profile\n" if ($debug);
+      $isProfile = $TRUE;
+
+   }elsif ($arg =~ /-playstore/i) {
+      print "is PlayStore\n" if ($debug);
+      $isPlayStore = $TRUE;
+
+   }elsif ($arg =~ /-noclean/i) {
+      print "is No Clean\n" if ($debug);
+      $doClean = $FALSE;
+
+   }elsif ($arg =~/-cfg/i) {
+      print "is Cfg\n" if ($debug);
+      $arg = shift(@ARGV);
+      push(@other, $arg);
+      print "Adding: $arg\n" if ($debug);
+
+   }elsif ( $arg =~ /-itm/i ) {
+      print "is Arg\n" if ($debug);
+      $arg = shift(@ARGV);
+      if ($arg eq "" or $arg =~ /-/) {
+         UsageInstructions("You must specify an Item Id with the -itm option...");
+      } else {
+         $arg = shift(@ARGV);
+         push(@assemble, $arg);
+      }
+
+   }elsif ( $arg =~ /-assm/i ) {
+      print "is Assemble Task\n" if ($debug);
+      $arg = shift(@ARGV);
+      if ($arg eq "" or $arg =~ /-/) {
+         UsageInstructions("You must specify a build task with the -assm option...");
+      } else {
+         if ($buildEnv eq $VZW) {
+            if ($arg =~ /^vzwapp:/) {
+               push(@assemble, $arg);
+            } else {
+               push(@assemble, "vzwapp:" . $arg);
+            }
+         } else {
+            # Must be a Sprint build, for now
+            if ($arg =~ /^sptapp:/) {
+               push(@assemble, $arg);
+            } else {
+               push(@assemble, "sptapp:" . $arg);
+            }
+         }
+      }
+   }else{
+      UsageInstructions("Unsupported command line option: $arg...")
+   }
+}
+
+# ensure that a build environment was set
+if ($buildEnv eq "") {
+   UsageInstructions("You must specify a build environment!!! Either -spt or -vzw...");
+}
+
+# test for build environment
+if (buildEnv eq "") {
+  UsageInstructions("You MUST specify at least the build target environment...");
+}
+
+# debug code
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~
+if ($debug) {
+  $temp = @other;
+  printf ("Build Env:\t%s\nOn Device:\t%s\nQA Environment:\t%s\nQA Module:\t%s\nText Marketing:\t%s\nRobocall:\t%s\nTo String:\t%s\nOthers:   \t%s\n",
+    $buildEnv, $onDevice, $qaEnv, $qaModule, $txtMarket, $roboMarket, $toString, $temp);
+  foreach $x (@other) {
+    print "\t$x\n";
+  }
+}
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# todo: Build the command line arguement based on priority of options
+# test for shortcut to build Mobile Installer build
+if ($sptMblInstl) {
+   # Code based on Jeff Coyle's MyBuild Script
+   print "\nBuilding Sprint Mobile Installer...\n";
+   print "   Using config based on 29Mar18 settings...\n";
+   print "   Creating delta.xml...\n";
+
+   system('echo "<config><parameters><build><delta>-150</delta></build></parameters></config>" > delta.xml');
+
+   $buildString = "./gradlew -PCONFIG=";
+   $buildString .= $cfgSpt;
+   $buildString .= "::$cfgQa05";
+   $buildString .= "::$cfgFstBld";
+   $buildString .= "::$cfgTxtId";
+   #$buildString .= "::$cfgSdCard";
+   $buildString .= "::$cfgHttp";
+   $buildString .= "::$cfgBuffer";
+   $buildString .= "::delta.xml";
+   $buildString .= "::$cfgDynItem";
+   #$buildString .= "::$cfgOnDev";
+   $buildString .= "::$cfgFrcCp";
+   $buildString .= "::$cfgRemote";
+   $buildString .= " assemble";
+
+} else {
+   ## Set the build engine
+   if ($buildEngine eq "gradle") {
+     $buildString = "./gradlew";
+   }
+
+   if ($isProfile) {
+      $buildString .= " --profile";
+   }
+
+   $buildString .= " -P CONFIG=";
+
+   ## Build the remainder of the command
+   if ($buildEnv eq $SPT) {
+     # Handle Sprint Builds
+
+     if ($onDevice) {
+       $buildString .= "configurations/spt-ondevice.xml";
+     }else{
+       $buildString .= "configurations/spt-sprint-generic.xml";
+     }
+
+     # Check for: QA Environment
+     if ($qaEnv) {
+       $buildString .= "::configurations/env-qa05.xml";
+     }
+
+   }else{
+     # Handle Verizon Builds
+
+     # All Verizon builds start with the Generic ECID CONFIG_PARAM
+     $buildString .= "configurations/vzw-ecid-generic.xml";
+
+     ####################################################
+     #  Obsolete acording to Jeff after Oct 25, 2017
+     ####################################################
+     # Check the SVN revision number
+     # as of ~r6169 all Verizon builds (v7.0+) are targeted for Android O and require the api-target-o configurations
+   #  if ($svnRev >= 6169) {
+   #     $buildString .= "::configurations/api-target-o.xml";
+   #  }
+
+     # Check for: QA Environment
+     if ($qaEnv) {
+       $buildString .= "::configurations/env-qa01.xml";
+     }
+
+     # Check for: On Device Landing Pad
+     if ($onDevice) {
+       $buildString .= "::configurations/ondevice.xml";
+     }
+   }
+
+   ## Add common items
+   ## Check for: QA module
+   if ($allowHttp) {
+      $buildString .= "::$cfgHttp";
+   }
+
+   if ($allowRemote) {
+      $buildString .= "::$cfgRemote";
+   }
+
+   if ($qaModule) {
+     $buildString .= "::configurations/qa.xml";
+   }
+
+   # Check for: Text Marketing
+   if ($txtMarket) {
+     $buildString .= "::configurations/allow-textid-marketing.xml";
+   }
+
+   # Check for: Robocall Marketing
+   if ($roboMarket) {
+     $buildString .= "::configurations/allow-robocall-marketing.xml";
+   }
+
+   # Check for: Other configs
+   if (@other) {
+     foreach $x (@other) {
+       if ($x =~/configurations\/.*xml/) {
+         $buildString .= "::$x";
+       }else{
+         $buildString .= "::configurations/$x";
+       }
+     }
+   }
+
+   # Check for: custom Item Id
+   if ($itemIdFlag) {
+      $buildString .= sprintf( " %s", $itemIdTxt);
+   }
+
+
+   ## Wrap up the command
+   if ($buildEngine eq "gradle") {
+     #$buildString .= " assemble";
+
+#     if ($buildEnv eq $VZW) {
+#        $buildString .= " vzwapp:build";
+#     } else {
+#        $buildString .= " sptapp:build";
+#     }
+
+     if (scalar(@assemble) == 0 ) {
+        # No assembly commands specified at the command line, build the task list.
+        if ($buildEnv eq $VZW) {
+           $temp = "";
+           # Start with the raw task types:
+           push(@assemble, "vzwapp:assemblePkgCeqManagedRelease");
+           push(@assemble, "vzwapp:assemblePkgVzwManagedRelease");
+           if ($isPlayStore) {
+              push(@assemble, "vzwapp:assemblePkgVzwPlayStoreRelease");
+           }
+
+           # Add the App Name portion:
+           #--------------------------
+           if ($isCallFilter) {
+             $temp = "BrandCallFilter";
+           } else {
+             $temp = "BrandCallerNameId";
+           }
+
+           # Do the appending
+           for (my $i = 0; $i < scalar(@assemble); $i++) {
+             @assemble[$i] .= $temp;
+           }
+
+           # Configure Localytics:
+           #----------------------
+           if ($isLlTest) {
+             $temp = "LocalyticsTest";
+           } else {
+             $temp = "LocalyticsProd";
+           }
+
+           # Do the appending
+           for (my $i = 0; $i < scalar(@assemble); $i++) {
+             @assemble[$i] .= $temp;
+           }
+
+
+           # Set the RCS state:
+           #----------------------
+           if ($isRcs) {
+             $temp = "RcsOn";
+           } else {
+             $temp = "RcsOff";
+           }
+
+           # Do the appending
+           for (my $i = 0; $i < scalar(@assemble); $i++) {
+             @assemble[$i] .= $temp;
+           }
+
+        } else {
+           # This is a Sprint build. Only 2 task types.
+           push(@assemble, "sptapp:assemblePkgCeqManagedReleaseCurrent");
+           push(@assemble, "sptapp:assemblePkgSptManagedReleaseCurrent");
+           if ($isPlayStore) {
+              push(@assemble, "sptapp:assemblePkgSptPlaystoreCurrent");
+           }
+
+           # Add the RCS setting
+           if ($isRcs) {
+              for (my $i = 0; $i < scalar(@assemble); $i++) {
+                 @assemble[$i] .= "RcsOn";
+              }
+           }
+        }
+     }
+     # Add assembly task commands to the build command
+     foreach $cmd (@assemble) {
+        $buildString .= " $cmd";
+     }
+   }
+}
+
+## Add tee to capture build log
+#$buildString .= " 2>&1 | tee buildLog.txt";
+
+## Actually run the build or just output the build string
+if ($toString) {
+  # Only output the build string, DO NOT execute
+  print "\nThe build command would be:\n$buildString\n\n";
+} else {
+  # Actually execute the build command
+  if ($doClean) {
+     print "\nPerforming Gradle Clean...\n\n";
+     system("./gradlew clean");
+  }
+
+  print "\n\n...Performing Gradle Build...\n";
+  print "   Build Command: $buildString\n\n";
+  system("$buildString");
+
+  print "...Complete\n\n";
+}
+
+
+# Sample backtick command with output of any command line returns
+#    $results = `grep -i "didier\\|hs/\\|CNAP\\|PREMCNAP\\|TRLCNAP\\|hs/sprint/smf" $1$2 > $1-filter$2`;
+#    print "$results\n";
+
+exit;
+
+############################################
+###   End of Main
+############################################
+
+sub UsageInstructions {
+  $errorMsg = shift(@_);
+  if ($errorMsg ne "") {
+    print "$errorMsg\n";
+  }
+
+  print "\n Usage: skbuild -vwz|-spt [arguments]\n";
+  print "  Build Types:\n";
+  print "    -vzw        for Verizon targeted application\n";
+  print "    -spt        for Sprint targeted application\n\n";
+  print "  Supported Arguments:\n";
+  print "    -QAxx       to use one of the QA test environments, where xx is the QA number (ie: QA01)\n";
+  print "    -qamod      to include the QA module in the build\n";
+  print "    -on         to use On Device Landing Pad\n";
+  print "    -txt        to include the Allow Text ID Marketing configuration\n";
+  print "    -robo       to include the Allow Robocall Marketing configuration\n";
+  print "    -toString   to output the build command without actually building\n";
+  print "    -cfg <txt>  to specify an additional configuration file, where <txt> is the xml file\n";
+  print "    -itm <id>   to specify an item ID to be built, where <id> is the item id to be built,\n";
+  print "                use 'test' to build with TEST_ITEMID_OK\n\n";
+  print "    -assm <txt> to specify a build task. This will overide all other standard build types\n";
+  print "    -rcs        turns RCS on for all builds. Default is off\n";
+  print "    -profile    turns Build profile on. Default is off\n";
+  print "    -playstore  adds PlayStore builds. These are NOT built by default\n";
+  print "    -name       builds Verizon app as Caller Name instead of Call Filter\n";
+  print "    -llprod     switches Localytics from test to production for builds\n";
+  print "    -noclean    turns off the Gradle Clean before building\n";
+
+
+  exit;
+}

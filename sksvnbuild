@@ -1,0 +1,463 @@
+#!/usr/bin/perl
+
+# setup variables
+$TRUE         = 1;
+$FALSE        = 0;
+$debug        = $FALSE;
+$buildEngine  = "gradle";
+$buildEnv     = "";
+$itemIdTxt    = "";
+@customConfig = ();
+$buildString  = "";
+$svnRev       = "";
+$deltaAmount  = 100;
+$onDevice     = $FALSE;
+$qaEnv        = $FALSE;
+$qaModule     = $FALSE;
+$txtMarket    = $FALSE;
+$roboMarket   = $FALSE;
+$toString     = $FALSE;
+$itemIdFlag   = $FALSE;
+$allowHttp    = $FALSE;
+$allowRemote  = $FALSE;
+$sdCardCoPack = $FALSE;
+$sptVerDelta  = $FALSE;
+$skipClean    = $FALSE;
+
+# quick shortcut for building Mobile Installer
+$sptMblInstl = $FALSE;
+
+# Set configuration strings
+###########################
+# Carrier and Environment
+$cfgSpt      = "configurations/spt-sprint-generic.xml";
+$cfgQa05     = "configurations/env-qa05.xml";
+$cfgDynItem  = "configurations/dynamic-spt-itemid.xml";
+
+# Build Options
+$cfgFstBld   = "configurations/proguard-shortcut-option.xml";
+$cfgTxtId    = "configurations/allow-textid-marketing.xml";
+$cfgSdCard   = "configurations/sdcard.xml";
+$cfgFrcCp    = "configurations/force-cp-option.xml";
+$cfgHttp     = "configurations/allow-http.xml";
+$cfgBuffer   = "configurations/buffer-time-no-met.xml";
+$cfgOnDev    = "configurations/ondevice.xml";
+$cfgRemote   = "configurations/remote-debug.xml";
+
+
+# Get the current revision number
+$svnRev = `svn info |grep Revision: |cut -c11-`;
+chomp($svnRev);
+
+# Check that the SVN version is new enough to use this tool
+if ($svnRev < 5351) {
+   print "This tool currently only supports builds for r5351 and newer!\n";
+   print "Use ANT for builds of this vintage as follows:\n\n";
+   print "ant -DCONFIG=configurations/vzw-ecid-generic.xml::configurations/gradle.xml gradle\n\n";
+   print "add in any specific configurations you desire inline with the -DCONFIG item.\n";
+   exit;
+}
+
+
+# check that there are any command line arguments
+if (@ARGV < 1) {
+   #UsageInstructions("You MUST specify at least the build target environment...");
+   # Goto the guided build process
+   GuidedOptionSelection();
+} else {
+   ProcessCommandLineOptions();
+}
+
+
+# ensure that a build environment was set
+if ($buildEnv eq "") {
+   UsageInstructions("You must specify a build environment!!! Either -spt or -vzw...");
+}
+
+# debug code
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~
+if ($debug) {
+  $temp = @customConfig;
+  print "\nBuild Options:\n";
+  print "--------------\n";
+  printf ("Build Env:\t%s\nOn Device:\t%s\nQA Environment:\t%s\nQA Module:\t%s\nText Marketing:\t%s\nRobocall:\t%s\nTo String:\t%s\nCustom Cfg:\t%s\n",
+    $buildEnv, $onDevice, $qaEnv, $qaModule, $txtMarket, $roboMarket, $toString, $temp);
+  foreach $x (@customConfig) {
+    print "\t$x\n";
+  }
+}
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# todo: Build the command line arguement based on priority of options
+
+# test for shortcut to build Mobile Installer build
+if ($sptMblInstl) {
+   # Code based on Jeff Coyle's MyBuild Script
+   print "\nBuilding Sprint Mobile Installer...\n";
+   print "   Using config based on 29Mar18 settings...\n";
+   print "   Creating delta.xml...\n";
+
+   system('echo "<config><parameters><build><delta>-150</delta></build></parameters></config>" > delta.xml');
+
+   $buildString = "./gradlew -PCONFIG=";
+   $buildString .= $cfgSpt;
+   $buildString .= "::$cfgQa05";
+   $buildString .= "::$cfgFstBld";
+   $buildString .= "::$cfgTxtId";
+   #$buildString .= "::$cfgSdCard";
+   $buildString .= "::$cfgHttp";
+   $buildString .= "::$cfgBuffer";
+   $buildString .= "::delta.xml";
+   $buildString .= "::$cfgDynItem";
+   #$buildString .= "::$cfgOnDev";
+   $buildString .= "::$cfgFrcCp";
+   $buildString .= "::$cfgRemote";
+   $buildString .= " assemble";
+
+} else {
+   ## Assemble the build command based on Options
+   #---------------------------------------------
+
+   ## Set the build engine
+   #----------------------
+   if ($buildEngine eq "gradle") {
+#      $buildString = "./gradlew --profile";
+      $buildString = "./gradlew";
+
+      if ($qaModule) {
+         $buildString .= ' -PAM=":modules:qa,:modules:shortcuts"';
+      }
+
+      if ($sptVerDelta) {
+         $buildString .= " -PVERDELTA=$deltaAmount";
+      }
+
+      $buildString .= " -P CONFIG=";
+   }
+
+   ## Create build environment related portion of the command
+   #---------------------------------------------------------
+   if ($buildEnv eq "SPT") {
+      # Handle Sprint Builds
+      $buildString .= "configurations/spt-sprint-generic.xml";
+
+      if ($qaEnv) {
+         $buildString .= "::configurations/env-qa05.xml";
+      }
+
+   } else {
+      # This is a Verizon Build
+      $buildString .= "configurations/vzw-ecid-generic.xml";
+
+      if ($qaEnv) {
+         $buildString .= "::configurations/env-qa01.xml";
+      }
+   }
+
+   ## Add in any other 'common' options
+   #-----------------------------------
+   # Check for: On Device Landing Pad
+   if ($onDevice) {
+      $buildString .= "::configurations/ondevice.xml";
+   }
+
+   # Check for: Allow HTTP URLs
+   if ($allowHttp) {
+      $buildString .= "::$cfgHttp";
+   }
+
+   # Check for: Remote Debugging
+   if ($allowRemote) {
+      $buildString .= "::$cfgRemote";
+   }
+
+   # Check for: QA Module
+   if ($qaModule) {
+     $buildString .= "::configurations/qa.xml";
+   }
+
+   # Check for: Text Marketing
+   if ($txtMarket) {
+     $buildString .= "::configurations/allow-textid-marketing.xml";
+   }
+
+   # Check for: Robocall Marketing
+   if ($roboMarket) {
+     $buildString .= "::configurations/allow-robocall-marketing.xml";
+   }
+
+   # Check for SD Card CoPack option
+   if ($sdCardCoPack) {
+      $buildString .= "::" . $cfgSdCard;
+   }
+
+   # Check for: Custom configs
+   if (@customConfig) {
+     foreach $x (@customConfig) {
+       if ($x =~/configurations\/.*xml/) {
+         $buildString .= "::$x";
+       }else{
+         $buildString .= "::configurations/$x";
+       }
+     }
+   }
+
+   # Check for: custom Item Id
+   if ($itemIdFlag) {
+      $buildString .= sprintf( " %s", $itemIdTxt);
+   }
+
+
+   ## Wrap up the command
+   print "\nSVN Rev: $svnRev\n" if ($debug);
+   if ($svnRev >= 7505) {
+      # These are the all Gradle builds and need assemble directives
+      if ($buildEnv eq "SPT") {
+         $buildString .= " sptapp:assemble";
+      } else {
+         $buildString .= " vzwapp:assemble";
+      }
+   } elsif ($svnRev >= 5351) {
+      # These builds contain PPJ files and use Gradle
+      $buildString .= " assemble";
+   } else {
+      # These builds contain PPJ files use ANT
+      ## Todo: Add in ANT support
+   }
+}
+
+
+## Actually run the build or just output the build string
+#--------------------------------------------------------
+if ($toString) {
+   # Only output the build string, DO NOT execute
+   print "\nThe build command would be:\n$buildString\n\n";
+}else{
+   # Actually execute the build command
+   if ($skipClean) {
+      print "\nSkipping Gradle Clean...\n\n";
+   } else {
+      print "\nPerforming Gradle Clean...\n\n";
+      system("./gradlew clean");
+      print "...Gradle clean complete\n\n";
+   }
+
+   print "\n\n\nPerforming Gradle Build...\n";
+   print "   Build Command: $buildString\n";
+   print "=" x 50 . "\n";
+   print "=" x 50 . "\n";
+   print "=" x 50 . "\n\n";
+   system("$buildString");
+
+   print "...Complete\n\n";
+}
+
+
+# Sample backtick command with output of any command line returns
+#    $results = `grep -i "didier\\|hs/\\|CNAP\\|PREMCNAP\\|TRLCNAP\\|hs/sprint/smf" $1$2 > $1-filter$2`;
+#    print "$results\n";
+
+exit;
+
+############################################
+###   End of Main
+############################################
+
+sub UsageInstructions {
+  $errorMsg = shift(@_);
+  if ($errorMsg ne "") {
+    print "$errorMsg\n";
+  }
+
+  print "\n Usage: skbuild -vwz|-spt [arguments]\n";
+  print "  Build Types:\n";
+  print "    -vzw        for Verizon targeted application\n";
+  print "    -spt        for Sprint targeted application\n\n";
+  print "  Supported Arguments:\n";
+  print "    -QAxx       to use one of the QA test environments, where xx is the QA number (ie: QA01)\n";
+  print "    -qamod      to include the QA module in the build\n";
+  print "    -on         to use On Device Landing Pad\n";
+  print "    -txt        to include the Allow Text ID Marketing configuration\n";
+  print "    -robo       to include the Allow Robocall Marketing configuration\n";
+  print "    -toString   to output the build command without actually building\n";
+  print "    -cfg <txt>  to specify an additional configuration file, where <txt> is the xml file\n";
+  print "    -itm <id>   to specify an item ID to be built, where <id> is the item id to be built,\n";
+  print "                use 'test' to build with TEST_ITEMID_OK\n";
+  print "    -delta      turns on the build version delta build for Sprint Mobile Installer testing\n";
+  print "    -debug      turns on debugging output\n";
+  print "    -remote     adds the Remote debugging config that allows for the ues of Chrome://inspect\n";
+  print "    -http       adds the allow HTTP config\n";
+  print "    -sd         adds the SD Card config that allows loading a CP from the SD Card\n";
+  print "    -noclean    skips gradlew clean, for making incremental builds where clean isn't needed\n";
+  print "\n";
+
+  exit;
+}
+
+sub GuidedOptionSelection {
+   my $input;
+   # Prompt the user to select the options available
+   print "\n\n";
+   print "Guided Build Command Creation:\n";
+   print "------------------------------\n\n";
+
+   print "What Carrier is this build for Verizon (v) or Sprint (s): (V/s)";
+   $input = <STDIN>;
+   chomp($input);
+   if ( lc($input) eq "s" ) {
+      $buildEnv = "SPT";
+   } else {
+      $buildEnv = "VZW";
+   }
+
+   print "\nWhat is the target environment? Production (p) or QA (q): (P/q)";
+   $input = <STDIN>;
+   chomp($input);
+   if ( lc($input) eq "q" ) {
+      $qaEnv = $TRUE;
+   }
+
+   print "\nDo you want the On Device option: (y/N)";
+   $input = <STDIN>;
+   chomp($input);
+   if ( lc($input) eq "y" ) {
+      $onDevice = $TRUE;
+   }
+
+   print "\nDo you want to allow HTTP URLs: (y/N)";
+   $input = <STDIN>;
+   chomp($input);
+   if ( lc($input) eq "y" ) {
+      $allowHttp = $TRUE;
+   }
+
+   print "\nDo you want the Remote Debugging option: (y/N)";
+   $input = <STDIN>;
+   chomp($input);
+   if ( lc($input) eq "y" ) {
+      $allowRemote = $TRUE;
+   }
+
+   print "\nDo you want the Robocall option: (y/N)";
+   $input = <STDIN>;
+   chomp($input);
+   if ( lc($input) eq "y" ) {
+      $roboMarket = $TRUE;
+   }
+   print "\nDo you want the SMS/TXT ID option: (y/N)";
+   $input = <STDIN>;
+   chomp($input);
+   if ( lc($input) eq "y" ) {
+      $txtMarket = $TRUE;
+   }
+
+   $toString = $TRUE;
+}
+
+sub ProcessCommandLineOptions {
+   # cycle through command line arguements
+   while (@ARGV) {
+      my $arg = shift(@ARGV);
+      print "Argument is: $arg\t" if ($debug);
+
+      #look for known arguments
+      if ($arg =~/-vzw/i) {
+         print "is Vzw\n" if ($debug);
+         if ($buildEnv eq "") {
+            $buildEnv = "VZW";
+         } else {
+            UsageInstructions("You cannot specify more than one build environment...");
+         }
+
+      }elsif ( $arg =~ /-sptMi/i ) {
+         print "is Spt MI\n" if ($debug);
+         $sptMblInstl = $TRUE;
+         $buildEnv = "SPT";
+
+      }elsif ($arg =~/-spt/i) {
+         print "is Spt\n" if ($debug);
+         if ($buildEnv eq "") {
+            $buildEnv = "SPT";
+         } else {
+            UsageInstructions("You cannot specify more than one build environment...");
+         }
+
+      }elsif ($arg =~/-on/i) {
+         print "is On Device\n" if ($debug);
+         $onDevice  = $TRUE;
+         $allowHttp = $TRUE;
+
+      }elsif ( ($arg =~/-qa\d\d/i) || ( $arg eq "-qa" ) ) {
+         print "is QA\n" if ($debug);
+         $qaEnv = $TRUE;
+
+      }elsif ($arg =~/-qamod/i) {
+         print "is Vzw\n" if ($debug);
+         $qaModule = $TRUE;
+
+      }elsif ($arg =~/-txt/i) {
+         print "is Txt\n" if ($debug);
+         $txtMarket = $TRUE;
+
+      }elsif ($arg =~/-robo/i) {
+         print "is Robo\n" if ($debug);
+         $roboMarket = $TRUE;
+
+      }elsif ($arg =~/-toString/i) {
+         print "is To String\n" if ($debug);
+         $toString = $TRUE;
+
+      }elsif ($arg =~/-debug/i) {
+         $debug = $TRUE;
+         print "is Debug\n" if ($debug);
+
+      }elsif ($arg =~ /-remote/i) {
+         print "is Remote\n" if ($debug);
+         $allowRemote = $TRUE;
+
+      }elsif ($arg =~ /-http/i) {
+         print "is HTTP\n" if ($debug);
+         $allowHttp = $TRUE;
+
+      }elsif ($arg =~ /-sd/i) {
+         print "is SD Card\n" if ($debug);
+         $sdCardCoPack = $TRUE;
+
+      }elsif ($arg =~ /-noclean/i) {
+         print "turning off gradlew clean\n" if ($debug);
+         $skipClean = $TRUE;
+
+      }elsif ($arg =~/-cfg/i) {
+         print "is Cfg\n" if ($debug);
+         $arg = shift(@ARGV);
+         push(@customConfig, $arg);
+         print "Adding: $arg\n" if ($debug);
+
+      }elsif ($arg =~/-delta/i) {
+         print "is Delta\n" if ($debug);
+         $sptVerDelta = $TRUE;
+         if ($ARGV[0] =~ /\d+/) {
+            # The next item was a number, use that as the delta value
+            $deltaAmount = shift(@ARGV);
+         }
+
+      }elsif ( $arg =~ /-itm/i ) {
+         print "is Itm\n" if ($debug);
+         $arg = shift(@ARGV);
+         print " the next arguement is: $arg\n" if ($debug);
+         if ($arg eq "" or $arg =~ /^-/) {
+            UsageInstructions("You must specify an Item Id with the -itm option...");
+         } else {
+            $itemIdFlag = $TRUE;
+            $itemIdTxt  = "-PBUILD_UUID=";
+            if ($arg eq "test" || $arg eq "TEST") {
+               $itemIdTxt .= "TEST_ITEMID_OK";
+            }else{
+               $itemIdTxt .= $arg;
+            }
+         }
+      }else{
+         UsageInstructions("Unsupported command line option: $arg...")
+      }
+   }
+}

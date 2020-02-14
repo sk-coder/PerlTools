@@ -1,0 +1,13 @@
+#!/usr/local/bin/perl
+use JSON;
+
+$file = shift(@ARGV);
+
+open (HANDLE, $file);
+
+while (my $line = <HANDLE>) {
+  if ($line =~ /4\.13\.500\.1/) {
+     $line =~ /"payload":(\{.+\})/;
+     print "$1\n";
+  }
+}

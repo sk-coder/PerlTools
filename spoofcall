@@ -1,0 +1,44 @@
+#!/bin/bash
+
+# a function to indent the output of commands
+indent() { sed 's/^/  /'; }
+
+# a function to show how this command is intended to be used
+display_usage()	{
+	echo "This script allows sending a spoof call to a device from the command line."
+	echo ""
+	echo "Usage: $0 receivingMdn spoofedMdn"
+	echo ""
+	echo "Example: $0 2065551234 2065554321"
+	}
+
+# The main script
+#----------------
+# Test for proper command line options
+if [[ !  $1 =~ [[:digit:]]{10} || ! $2 =~ [[:digit:]]{10} ]];
+then
+	display_usage
+else
+	# resssign command line options
+	called_mdn=$1
+	calling_mdn=$2
+  # Check for a leading 1 in the MDN to be called
+	if [[ ! ${called_mdn:0:1} == "1" ]];
+	then
+		called_mdn="1"$called_mdn
+	fi
+
+	# Check for a timeout value, if not present use default, -z is true if missing
+	if [[ -z $3 ]];
+	then
+		timeout=15
+	else
+		timeout=$3
+	fi
+
+	echo "  Sending Spoof Call to: $called_mdn from: $calling_mdn"
+	echo "  Command: spoofcall2/$called_mdn/$calling_mdn/$timeout/false"
+	curl -s http://qaint1:11000/web/spoofcall2/$called_mdn/$calling_mdn/$timeout/false | indent
+    echo "  Spoof Call Sent"
+	echo ""
+fi

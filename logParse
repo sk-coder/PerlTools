@@ -1,0 +1,19 @@
+#!/usr/bin/perl
+
+# capture command line arguements
+$file = $ARGV[0];
+
+if ($file eq "") {
+  print "Usage: logParse <file>\n";
+} else {
+  if ($file =~ /(\S+)(\.log|\.hslog|\.txt)/) {
+    print "Processing $1$2 to $1-filtered$2\n";
+
+    # sample command
+    # grep -i "didier\|hs/\|CNAP\|PREMCNAP\|TRLCNAP\|hs/sprint/smf" WEBS-1108_02-10.hslog > WEBS-1108_02-10-filter.hslog
+    $results = `grep -i "didier\\|hs/\\|CNAP\\|PREMCNAP\\|TRLCNAP\\|hs/sprint/smf" $1$2 > $1-filter$2`;
+    print "$results\n";
+  } else {
+    print "Please provide a file that ends in .log .hslog or .txt\n";
+  }
+}

@@ -1,0 +1,25 @@
+#!/usr/bin/python
+
+import sys
+import re
+import json
+from datetime import datetime
+
+my_file =  open(sys.argv[1], 'r')
+
+print "MDN:,Time:,Event:,Item ID"
+
+for line in my_file:
+  if "4.13.500.1" in line:
+
+      line = line.lstrip(',')
+
+#      print "About to Load JSON: " + line
+      lj = json.loads(line)
+      pl = json.dumps(lj["payload"])
+#      print "Payload: " + pl
+      pj = json.loads(pl)
+      ts = lj["reportTime"]
+      to = datetime.fromtimestamp(ts/1000)
+
+      print lj["mdn"] + "," + to.strftime("%H:%M:%S") + "," + pj["event_name"] + "," + lj["itemId"]

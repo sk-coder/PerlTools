@@ -1,0 +1,69 @@
+#!/usr/bin/perl
+
+$calledNumber = "";
+$listFile     = "";
+
+# Check that ANY arguments have been supplied!
+if (scalar @ARGV == 0) {
+   print "No arguements supplied! You must supply 2 arguments!!!\n";
+   print "  A Number to be called in: nnn-nnn-nnnn or nnnnnnnnn format.\n";
+   print "  and a file name with numbers (one per line) to be spoofed. \n\n";
+   exit;
+}
+
+# Look for matching arguments for file name and called number
+foreach my $arg (@ARGV) {
+   if ($arg =~ /\w+\.\w+/) {
+      $listFile = $arg;
+   }
+   elsif ($arg =~ /\d{10}/) {
+      $calledNumber = $arg;
+   }
+   elsif ($arg =~ /\((\d{3})\)\s*(\d{3})\-(\d{4})/) {
+      $calledNumber = $1 . $2 . $3;
+   }
+   elsif ( $arg =~ /(\d{3})[\s\-]*(\d{3})[\s\-]*(\d{4})/ ) {
+      $calledNumber = $1 . $2 . $3;
+   }
+}
+
+# Check that both arguments are present
+if (($calledNumber eq "") || ($listFile eq "")) {
+   print "Not enough arguements supplied! You must supply 2 arguments!!!\n";
+   if ($calledNumber eq "") {
+      print "  Please add a Number to be called in: nnn-nnn-nnnn or nnnnnnnnn format.\n";
+   }
+   else {
+      print "  Please add a file name with numbers (one per line) to be spoofed. \n\n";
+   }
+   exit;
+}
+
+# Open the file with numbers to spoof and populate the array
+@callingNumbers;
+open ($numberFile, "<" . $listFile);
+foreach $line (<$numberFile>) {
+   chomp $line;
+   if ($line =~ /#/ || $line eq "") {
+      # do Nothing
+      # print "skipping: --$line--\n";
+   }
+   else {
+      # print "found: $line\n";
+      $line =~ s/[\(\)\s\-]//g;
+      push(@callingNumbers, $line);
+      # print "  transform: $line\n";
+   }
+}
+
+$counter = 0;
+foreach $number (@callingNumbers) {
+   $logString = "adb shell log -t hs/script 'Placing Spoofcall from: $number'";
+   system "$logString";
+   print "Spoofing $number to $calledNumber\n";
+   system "spoofcall $calledNumber $number";
+   $counter ++;
+   sleep(30);
+}
+
+print "$counter calls completed\n\n";

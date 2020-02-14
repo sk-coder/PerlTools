@@ -1,0 +1,376 @@
+#!/usr/bin/perl
+
+use  Term::ReadKey;
+use DateTime;
+
+## use this when curl is working
+# get my current password
+#print "Type your password:";
+#ReadMode('noecho'); # don't echo
+#chomp(my $userPw = <STDIN>);
+#ReadMode(0);        # back to normal
+#print "\n";
+
+# setup other variables
+$TRUE              = 1;
+$FALSE             = 0;
+$buildString       = "";
+$copyCommand       = "";
+$apkPath           = "build/outputs/apk/";
+$tempPath          = "/users/skarneth/tempBuild";
+#$debugVzwPath     = "/apks/Debug/VZW/";
+#$debugSptPath     = "/apks/Debug/SPT/";
+#$releaseVzwPath   = "/apks/Release/VZW/";
+#$releaseSptPath   = "/apks/Release/SPT/";
+#$debugSptPath     = "/apks/SPT/Debug/";
+#$releaseSptPath   = "/apks/SPT/Release/";
+$sptPath           = "/apks/SPT";
+$vzwVzwPath        = "/apks/VZW-com.vzw";
+$vzwCeqPath        = "/apks/VZW-com.ceq";
+$ulPath            = "https://devtools/confluence/rest/api/content/25101011/child/attachment";
+$zipFile           = "";
+$baseCurl          = "curl -D- -u skarneth:$userPw -X POST -H \"X-Atlassian-Token: nocheck\" -F ";
+$successfulBuilds  = 0;
+$failedBuilds      = 0;
+$dt                = DateTime->now;   # Stores current date and time as datetime object
+$date              = $dt->ymd;        # Retrieves date as a string in 'yyyy-mm-dd' format
+$buildFailures     = "";
+$buildTimes        = "";
+$tarSourcePath     = "";
+$pathString        = "";
+$buildSuccess      = 0;
+$dtEnd;
+$dur;
+$hrs;
+$mins;
+$secs;
+$nanos;
+
+# Sample CURL command
+# $curl -D- -u skarneth:PWxxxxxx -X POST -H "X-Atlassian-Token: nocheck" -F "file=@myTar.tar" https://devtools/confluence/rest/api/content/25101011/child/attachment
+
+# Get the current revision number
+$svnRev = `svn info |grep Revision: |cut -c11-`;
+chomp($svnRev);
+
+
+# Test for target paths
+#----------------------
+$pathString = "$tempPath/apks";
+unless (-d "$pathString") {
+   mkdir("$pathString",0777) || die "$tempPath NOT Created: $!";
+}
+
+$pathString = $tempPath . $sptPath;
+unless (-d "$pathString") {
+   mkdir("$pathString",0777) || die "$tempPath NOT Created: $!";
+}
+
+$pathString = $tempPath . $vzwVzwPath;
+unless (-d "$pathString") {
+   mkdir("$pathString",0777) || die "$tempPath NOT Created: $!";
+}
+
+$pathString = $tempPath . $vzwCeqPath;
+unless (-d "$pathString") {
+   mkdir("$pathString",0777) || die "$tempPath NOT Created: $!";
+}
+
+
+# start making buildString
+#-------------------------
+
+############################################
+#             VERIZON BUILDS               #
+############################################
+
+# VZW, QA, txt, robo, on device
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+$dt = DateTime->now;
+$buildSuccess = BuildThis(
+  "./gradlew --profile -P CONFIG=configurations/vzw-ecid-generic.xml::configurations/env-qa01.xml::configurations/ondevice.xml::configurations/allow-textid-marketing.xml::configurations/allow-robocall-marketing.xml::configurations/api-target-o.xml assemble",
+  "VZW QA On-Device robo txt"
+);
+$dtEnd = DateTime->now;
+$dur = $dtEnd->subtract_datetime( $dt );
+($hrs, $mins, $secs, $nanos) = $dur->in_units( 'hours', 'minutes', 'seconds', 'nanoseconds');
+
+$buildTimes = sprintf( "Vzw Qa Txt Robo On: %02sh %02s:%02s.%04s\n", $hrs, $mins, $secs, $nanos);
+
+if ($buildSuccess) {
+   #-- Copy Files
+   # 10/12/2017 - For now don't worry about copying these builds
+   #$copyCommand = "cp " . $apkPath . "PremiumCallerId-cequint-debug.apk " . $tempPath . $debugVzwPath . $svnRev . "-Debug-Vzw-Ceq-Qa-Robo-Txt-On.apk";
+   #`$copyCommand`;
+
+   #$copyCommand = "cp " . $apkPath . "PremiumCallerId-vzw-debug.apk " . $tempPath . $debugVzwPath . $svnRev . "-Debug-Vzw-Vzw-Qa-Robo-Txt-On.apk";
+   #`$copyCommand`;
+}
+
+
+
+# VZW, QA, txt, robo
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+$dt = DateTime->now;
+$buildSuccess = BuildThis(
+  "./gradlew --profile -P CONFIG=configurations/vzw-ecid-generic.xml::configurations/env-qa01.xml::configurations/allow-textid-marketing.xml::configurations/allow-robocall-marketing.xml::configurations/api-target-o.xml assemble",
+  "VZW QA robo txt"
+);
+$dtEnd = DateTime->now;
+$dur = $dtEnd->subtract_datetime( $dt );
+($hrs, $mins, $secs, $nanos) = $dur->in_units( 'hours', 'minutes', 'seconds', 'nanoseconds');
+
+$buildTimes .= sprintf( "Vzw Qa Txt Robo:    %02sh %02s:%02s.%04s\n", $hrs, $mins, $secs, $nanos);
+
+if ($buildSuccess) {
+   #-- Copy Files
+   # 10/12/2017 - For now only copy these builds
+   $copyCommand = "cp " . $apkPath . "PremiumCallerId-cequint-debug.apk " . $tempPath . $vzwCeqPath . "/r" . $svnRev . "-VZW-Debug-QA-.ceq-Robo-Txt.apk";
+   `$copyCommand`;
+
+   $copyCommand = "cp " . $apkPath . "PremiumCallerId-cequint-release.apk " . $tempPath . $vzwCeqPath . "/r" . $svnRev . "-VZW-REL-QA-.ceq-Robo-Txt.apk";
+   `$copyCommand`;
+
+   $copyCommand = "cp " . $apkPath . "PremiumCallerId-vzw-debug.apk " . $tempPath . $vzwVzwPath . "/r" . $svnRev . "-VZW-Debug-QA-.vzw-Qa-Robo-Txt.apk";
+   `$copyCommand`;
+
+   $copyCommand = "cp " . $apkPath . "PremiumCallerId-vzw-release.apk " . $tempPath . $vzwVzwPath . "/r" . $svnRev . "-VZW-REL-QA-.vzw-Robo-Txt.apk";
+   `$copyCommand`;
+
+   #$copyCommand = "cp " . $apkPath . "PremiumCallerId-cequint-release1024.apk " . $tempPath . $releaseVzwPath . $svnRev . "-REL-Vzw-Ceq-Qa-Robo-Txt-1024.apk";
+   #`$copyCommand`;
+}
+
+
+# VZW, txt, robo
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+$dt = DateTime->now;
+$buildSuccess = BuildThis(
+  "./gradlew --profile -P CONFIG=configurations/vzw-ecid-generic.xml::configurations/allow-textid-marketing.xml::configurations/allow-robocall-marketing.xml::configurations/api-target-o.xml assemble",
+  "VZW robo txt"
+);
+$dtEnd = DateTime->now;
+$dur = $dtEnd->subtract_datetime( $dt );
+($hrs, $mins, $secs, $nanos) = $dur->in_units( 'hours', 'minutes', 'seconds', 'nanoseconds');
+
+$buildTimes .= sprintf( "Vzw Txt Robo:       %02sh %02s:%02s.%04s\n", $hrs, $mins, $secs, $nanos);
+
+if ($buildSuccess) {
+   #-- Copy Files
+   $copyCommand = "cp " . $apkPath . "PremiumCallerId-cequint-release.apk " . $tempPath . $vzwCeqPath . "/r" . $svnRev . "-VZW-REL-PROD-.ceq-Robo-Txt.apk";
+   `$copyCommand`;
+
+   $copyCommand = "cp " . $apkPath . "PremiumCallerId-vzw-release.apk " . $tempPath . $vzwVzwPath . "/r" . $svnRev . "-VZW-REL-PROD-.vzw-Robo-Txt.apk";
+   `$copyCommand`;
+
+   $copyCommand = "cp " . $apkPath . "PremiumCallerId-cequint-debug.apk " . $tempPath . $vzwCeqPath . "/r" . $svnRev . "-VZW-Debug-PROD-.ceq-Robo-Txt.apk";
+   `$copyCommand`;
+
+   $copyCommand = "cp " . $apkPath . "PremiumCallerId-vzw-debug.apk " . $tempPath . $vzwVzwPath . "/r" . $svnRev . "-VZW-REL-Debug-.vzw-Robo-Txt.apk";
+   `$copyCommand`;
+
+   #$copyCommand = "cp " . $apkPath . "PremiumCallerId-cequint-release1024.apk " . $tempPath . $releaseVzwPath . $svnRev . "REL-Vzw-Ceq-Robo-Txt-1024.apk";
+   #`$copyCommand`;
+}
+
+
+############################################
+#             SPRINT BUILDS                #
+############################################
+
+# SPT, QA, txt, robo, on device
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+$dt = DateTime->now;
+$buildSuccess = BuildThis(
+  "./gradlew --profile -P CONFIG=configurations/spt-ondevice.xml::configurations/env-qa05.xml::configurations/allow-textid-marketing.xml::configurations/allow-robocall-marketing.xml assemble",
+  "SPT QA On-Device robo txt"
+);
+$dtEnd = DateTime->now;
+$dur = $dtEnd->subtract_datetime( $dt );
+($hrs, $mins, $secs, $nanos) .= $dur->in_units( 'hours', 'minutes', 'seconds', 'nanoseconds');
+
+$buildTimes .= sprintf( "Spt Qa Txt Robo On: %02sh %02s:%02s.%04s\n", $hrs, $mins, $secs, $nanos);
+
+if ($buildSuccess) {
+   #-- Copy Files
+   # 10/12/2017 - For now don't worry about copying these builds
+   #$copyCommand = "cp " . $apkPath . "PremiumCallerId-spt-debug.apk " . $tempPath . $debugSptPath . $svnRev . "Debug-Spt-Qa-Robo-Txt-On.apk";
+   #`$copyCommand`;
+
+   #$copyCommand = "cp " . $apkPath . "PremiumCallerId-spt-release.apk " . $tempPath . $releaseSptPath . $svnRev . "REL-Spt-Qa-Robo-Txt-On.apk";
+   #`$copyCommand`;
+}
+
+
+# SPT, QA, txt, robo
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+$dt = DateTime->now;
+$buildSuccess = BuildThis(
+  "./gradlew --profile -P CONFIG=configurations/spt-sprint-generic.xml::configurations/env-qa05.xml::configurations/allow-textid-marketing.xml::configurations/allow-robocall-marketing.xml assemble",
+  "SPT QA robo txt"
+);
+$dtEnd = DateTime->now;
+$dur = $dtEnd->subtract_datetime( $dt );
+($hrs, $mins, $secs, $nanos) .= $dur->in_units( 'hours', 'minutes', 'seconds', 'nanoseconds');
+
+$buildTimes .= sprintf( "Spt Qa Txt Robo:    %02sh %02s:%02s.%04s\n", $hrs, $mins, $secs, $nanos);
+
+if ($buildSuccess) {
+   #-- Copy Files
+   $copyCommand = "cp " . $apkPath . "PremiumCallerId-spt-debug.apk " . $tempPath . $sptPath . "/r" . $svnRev . "-SPT-Debug-QA-Robo-Txt.apk";
+   `$copyCommand`;
+
+   $copyCommand = "cp " . $apkPath . "PremiumCallerId-spt-release.apk " . $tempPath . $sptPath . "/r" . $svnRev . "-SPT-REL-QA-Robo-Txt.apk";
+   `$copyCommand`;
+}
+
+# SPT, txt, robo
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+$dt = DateTime->now;
+$buildSuccess = BuildThis(
+  "./gradlew --profile -P CONFIG=configurations/spt-sprint-generic.xml::configurations/allow-textid-marketing.xml::configurations/allow-robocall-marketing.xml assemble",
+  "SPT robo txt"
+);
+$dtEnd = DateTime->now;
+$dur = $dtEnd->subtract_datetime( $dt );
+($hrs, $mins, $secs, $nanos) .= $dur->in_units( 'hours', 'minutes', 'seconds', 'nanoseconds');
+
+$buildTimes .= sprintf( "Spt Txt Robo:       %02sh %02s:%02s.%04s\n", $hrs, $mins, $secs, $nanos);
+
+if ($buildSuccess) {
+   #-- Copy Files
+   $copyCommand = "cp " . $apkPath . "PremiumCallerId-spt-debug.apk " . $tempPath . $sptPath . "/r" . $svnRev . "-SPT-Debug-PROD-Robo-Txt.apk";
+   `$copyCommand`;
+
+   $copyCommand = "cp " . $apkPath . "PremiumCallerId-spt-release.apk " . $tempPath . $sptPath . "/r" . $svnRev . "-SPT-REL-PROD-Robo-Txt.apk";
+   `$copyCommand`;
+}
+
+
+####################################
+#        Finishing stuff           #
+####################################
+print "\n" . "-" x 50 . "\nDaily Builds Complete\n";
+
+print "--Taring Builds...\n";
+# TAR up the Verizon com.cequint builds into a single file
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+$finalTarFile    = "$date-r$svnRev-Verizon-com.ceq.tar";
+$tarSourcePath   = $tempPath . $vzwCeqPath;
+$finalTarCommnad = "tar -cf $tempPath/$finalTarFile -C $tarSourcePath .";
+# print "Tar Command: $finalTarCommnad\n";
+`$finalTarCommnad`;
+print "...Verizon com.cequint TAR complete\n";
+
+# TAR up the Verizon com.cequint builds into a single file
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+$finalTarFile    = "$date-r$svnRev-Verizon-com.vzw.tar";
+$tarSourcePath   = $tempPath . $vzwVzwPath;
+$finalTarCommnad = "tar -cf $tempPath/$finalTarFile -C $tarSourcePath .";
+# print "Tar Command: $finalTarCommnad\n";
+`$finalTarCommnad`;
+print "...Verizon com.vzw TAR complete\n";
+
+# TAR up the Debug builds into a single file
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+$finalTarFile    = "$date-r$svnRev-Sprint.tar";
+$tarSourcePath   = $tempPath . $sptPath;
+#$finalTarCommnad = "tar -cf $tempPath/$finalTarFile -C $tempPath/apks/Debug .";
+$finalTarCommnad = "tar -cf $tempPath/$finalTarFile -C $tarSourcePath .";
+`$finalTarCommnad`;
+print "...Sprint TAR complete\n";
+
+
+# Cleanup files
+#~~~~~~~~~~~~~~
+print "Cleaning up apk files...\n";
+#`rm /Users/skarneth/tempBuild/apks/VZW/Debug/*`;
+#`rm /Users/skarneth/tempBuild/apks/VZW/Release/*`;
+#`rm /Users/skarneth/tempBuild/apks/SPT/Debug/*`;
+#`rm /Users/skarneth/tempBuild/apks/SPT/Release/*`;
+
+$pathString = $tempPath . $sptPath . "/*";
+`rm $pathString`;
+
+$pathString = $tempPath . $vzwVzwPath . "/*";
+`rm $pathString`;
+
+$pathString = $tempPath . $vzwCeqPath . "/*";
+`rm $pathString`;
+
+
+
+print "\n" . "=" x 50 . "\nDaily Builds Complete\n\n";
+print "$successfulBuilds\tSuccessful Builds\n";
+print "$failedBuilds\tFailed Builds\n";
+
+if ($failedBuilds > 0) {
+   print "$buildFailures\n";
+}
+
+print "=" x 50 . "\n";
+print "\nBuild Times:\n";
+print "------------\n";
+print "$buildTimes\n";
+
+print "*" x 50 . "\n";
+print "Process Complete.\n";
+
+exit;
+
+############################################
+###   End of Main
+############################################
+
+sub BuildThis {
+  my $buildCommand = shift(@_);
+  my $fileName     = shift(@_);
+  my $retVal       = 1;
+  my $output, $line;
+
+  # Actually execute the build command
+
+  print ">" x 50 . "\n";
+  print ">>>>>   Performing Gradle Clean...\n";
+  print ">" x 50 . "\n\n";
+  system("./gradlew clean");
+
+  print "\n\n...Performing Gradle Build...\n";
+  print "*" x 50 . "\n";
+  print "*****   $fileName\n";
+  print "*" x 50 . "\n\n";
+  print "+" x 100 . "\n";
+  print "+++++   Build Command:\n$buildCommand\n";
+  print "+" x 100 . "\n\n";
+
+  #~ Execute the build
+  # Old backtick method that steals all the STDOut
+  #my $output = `$buildCommand`;
+
+  # New method using open
+  open CMD,'-|',$buildCommand or die $@;
+  while ( defined( $line = <CMD> ) ) {
+      print "$line";
+      $output .= $line;
+  }
+  close CMD;
+
+
+  if ($output =~ /BUILD SUCCESSFUL/) {
+       $successfulBuilds ++;
+  } else {
+     my $errorFile = $tempPath . "/buildError.txt";
+     open (my $fh, ">>", $errorFile);
+     print $fh "ERROR dump:\n" . "=" x 50 . "$buildCommand\n\nResults......\n$output\n\n";
+     $failedBuilds ++;
+     $buildFailures .= $fileName . "\n";
+     $retVal = 0;
+  }
+
+  print "<" x 50 . "\n";
+  print "...$fileName Build Complete\n";
+  print "<" x 50 . "\n\n";
+
+  return $retVal;
+
+}

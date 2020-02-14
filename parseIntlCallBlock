@@ -1,0 +1,54 @@
+#!/usr/bin/perl
+
+# capture command line arguements
+$filename = $ARGV[0];
+$outFile;
+
+if ($filename eq "") {
+  print "Usage: logParse <file>\n";
+} else {
+  if ($filename =~ /(\S+)(\.log|\.hslog|\.txt)/) {
+    $outFile = $1 . "-IntBlock" . $2;
+    print "Processing $1$2 to $outFile\n";
+
+    $printSpacer = 0;
+
+    open (FILE, "<" . $filename);
+    open (OUTPUT, ">" . $outFile);
+
+    while ($line = <FILE>){
+      chomp ($line);
+      if ($line =~ /hs\/script/) {
+         if ($printSpacer) {
+            print OUTPUT "\n";
+            $printSpacer = 0;
+         }
+         print OUTPUT "$line\n";
+      }
+      else {
+         $printSpacer = 1;
+      }
+      
+      if ($line =~ /hs\/cc\/db/){
+      #elsif ($line =~ /Checking Regex matches/) {
+         print OUTPUT "$line\n";
+         $printSpacer = 1;
+      }
+      elsif ($line =~ /PolicyAndReason/) {
+         print OUTPUT "$line\n";
+         $printSpacer = 1;
+      }
+      elsif ($line =~ /Found Policy/) {
+         print OUTPUT "$line\n";
+         $printSpacer = 1;
+      }
+      elsif ($line =~ /OEM End-of-call/){
+         print OUTPUT "$line\n";
+         $printSpacer = 1;
+      }
+   }
+
+  } else {
+    print "Please provide a file that ends in .log .hslog or .txt\n";
+  }
+}
